@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:WindowedApplication xmlns:mx="http://www.adobe.com/2006/mxml" 
+	layout="absolute" applicationComplete="initApp()" width="334" height="334" alpha="1.0" 
+	backgroundGradientAlphas="[0.0, 0.0]" cornerRadius="0" 
+	showTitleBar="false" showStatusBar="false">
+
+	<mx:Script>
+		<![CDATA[
+		import com.adobe.crypto.WSSEUsernameToken;
+		import mx.utils.Base64Encoder;
+		
+		private var filePath:String;
+
+		private function initApp():void{
+			
+			//id,passの取得
+			try{
+				var storedValue:ByteArray= EncryptedLocalStore.getItem("hID");
+				hatenaId.text =storedValue.readUTFBytes(storedValue.length);
+			}catch(error:Error){
+				hatenaId.text = "";
+			}
+
+			try{
+				var storedValuePass:ByteArray= EncryptedLocalStore.getItem("hPASS");
+				hatenaPass.text =storedValuePass.readUTFBytes(storedValuePass.length);
+			}catch(error:Error){
+				hatenaPass.text = "";
+			}
+			
+			//Dragのイベント登録
+			topPanel.addEventListener(NativeDragEvent.NATIVE_DRAG_ENTER,doDragEnter);
+			topPanel.addEventListener(NativeDragEvent.NATIVE_DRAG_DROP,doDragDrop);
+			
+		}
+
+		// 画像用パネル
+		private function doDragEnter(event:NativeDragEvent):void{
+			trace("doDragEnter");
+			if(event.clipboard.hasFormat(ClipboardFormats.FILE_LIST_FORMAT)){
+				NativeDragManager.acceptDragDrop(topPanel);
+			}
+		}
+		
+		// 画像用パネル
+		private function doDragDrop(event:NativeDragEvent):void{
+			trace("doDragDrop");
+			var files:Array=event.clipboard.getData(ClipboardFormats.FILE_LIST_FORMAT) as Array;
+			for(var i:int=0; i<files.length; i++){
+				trace(files[i].url);
+				topImage.load(files[i].url);
+				filePath = files[i].url;
+				HatenaFotoPost();
+			}
+		}
+		
+		private function HatenaFotoPost():void{
+			if (hatenaId.text == ""){
+				header.text = "idいれてから！";
+				return;
+			}
+			if (hatenaPass.text == ""){
+				header.text = "passいれてから！";
+				return;
+			}
+
+			//ID,PASSの暗号化保存
+			var str:String = hatenaId.text;
+			var bytes:ByteArray = new ByteArray();
+			bytes.writeUTFBytes(str);
+			EncryptedLocalStore.setItem("hID", bytes);
+
+			var strP:String  = hatenaPass.text;
+			var bytesP:ByteArray = new ByteArray();
+			bytesP.writeUTFBytes(strP);
+			EncryptedLocalStore.setItem("hPASS", bytesP);
+			
+			header.text = "ボタン押したよ。";
+
+			//画像の読み込み
+			var urlloader:URLLoader = new URLLoader();
+			urlloader.addEventListener(Event.COMPLETE, ImageLoaded);
+			urlloader.dataFormat = URLLoaderDataFormat.BINARY;
+			urlloader.load(new URLRequest(filePath));
+		}
+
+        private function configureListeners(dispatcher:IEventDispatcher):void {
+            dispatcher.addEventListener(Event.COMPLETE, completeHandler);
+            //dispatcher.addEventListener(Event.OPEN, openHandler);
+            //dispatcher.addEventListener(ProgressEvent.PROGRESS, progressHandler);
+            //dispatcher.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler);
+            //dispatcher.addEventListener(HTTPStatusEvent.HTTP_STATUS, httpStatusHandler);
+            //dispatcher.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+        }
+
+		private function ImageLoaded(e:Event):void {
+			trace("ImageLoaded is Called");
+			
+			var wsseToken:String =WSSEUsernameToken.getUsernameToken(hatenaId.text,hatenaPass.text);
+			trace(wsseToken);
+
+			var request:URLRequest = new URLRequest("http://f.hatena.ne.jp/atom/post");
+			
+            //画像のエンコード
+            var enc:Base64Encoder = new Base64Encoder();
+            enc.encodeBytes(ByteArray(URLLoader(e.target).data));
+            var encStr:String;
+            encStr = enc.flush();
+            
+            //XMLの組み立て
+    		var xmlString:String = new String();
+    		xmlString= '<entry xmlns="http://purl.org/atom/ns#"> ' + 
+    			       	'<title>Sample</title>' + 
+    			        '<content mode="base64" type="image/jpeg">' + encStr + '</content>' + 
+    			   	   '</entry>';
+    			               
+        	//リクエストの組み立て
+        	request.method = "POST";
+        	request.contentType = "application/x.atom+xml";
+           	request.requestHeaders = new Array(new URLRequestHeader("X-WSSE", wsseToken));
+			request.data= xmlString;
+
+			var loader:URLLoader = new URLLoader();
+			configureListeners(loader);
+        	try {
+            	loader.load(request);
+        	} catch (error:Error) {
+            	trace("Unable to load requested document.");
+        	}
+		}
+
+        private function completeHandler(event:Event):void {
+            var loader:URLLoader = URLLoader(event.target);
+            trace("completeHandler: " + loader.data);
+            header.text = "たぶんUPできたよ。見てはいよ。";//loader.data;
+        }
+        
+		private function windowDrag():void {
+			this.stage.nativeWindow.startMove();
+		}
+		
+		private function windowClose():void {
+			this.stage.nativeWindow.close();
+		}
+		
+		]]>
+	</mx:Script>
+	
+	<mx:Panel width="330" height="330" layout="absolute" x="1" y="0" id="topPanel" title="HatenaFotolifeUploader"  alpha="1.0">
+		<mx:Image x="10" y="10" width="296" height="220" id="topImage" scaleContent="true"/>
+		<mx:TextInput x="10" y="238" id="hatenaId" width="136"/>
+		<mx:TextInput x="154" y="238" id="hatenaPass" displayAsPassword="true" width="150"/>
+		<mx:Text x="10" y="268" width="294" id="header"/>
+	</mx:Panel>
+	
+	<mx:Label x="1" y="2" id="mv" mouseDown="windowDrag()" width="291"/>
+	<mx:Button x="281" y="3" label="×" id="btnCls" click="windowClose()"/>
+	
+</mx:WindowedApplication>

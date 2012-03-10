@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:WindowedApplication xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" width="398"
+	showStatusBar="false"
+	applicationComplete="initApp()">
+
+
+	<mx:Script>
+		<![CDATA[
+		import com.adobe.crypto.WSSEUsernameToken;
+		import com.adobe.images.JPGEncoder;
+		import mx.utils.Base64Encoder;
+
+		private var photo_bd:BitmapData = new BitmapData(320, 240, false, 0x00CCCCCC);;
+
+		private function initApp():void{
+			
+			//id,passの取得
+			try{
+				var storedValue:ByteArray= EncryptedLocalStore.getItem("hID");
+				hatenaId.text =storedValue.readUTFBytes(storedValue.length);
+			}catch(error:Error){
+				hatenaId.text = "";
+			}
+
+			try{
+				var storedValuePass:ByteArray= EncryptedLocalStore.getItem("hPASS");
+				hatenaPass.text =storedValuePass.readUTFBytes(storedValuePass.length);
+			}catch(error:Error){
+				hatenaPass.text = "";
+			}
+
+		//カメラソースを取得
+		var tape:Camera = Camera.getCamera();
+		//表示処理
+		if ( tape != null ) {
+			//カメラのモードを変更
+			tape.setMode(320,240,60);
+			//カメラをディスプレイに追加
+			videoDisplay.attachCamera( tape );
+			trace("カメラ有り");
+		} else {
+			//カメラが接続されていないとき
+			trace("カメラ無し");
+		}
+	
+
+
+		}
+		
+		private function shot():void{
+			photo_bd.draw(videoDisplay);	
+			
+			var jpgEncoder:JPGEncoder = new JPGEncoder(80);
+			var byteArr:ByteArray = jpgEncoder.encode(photo_bd);
+			
+			var fileName:String;
+			fileName = "test.jpg";
+			
+			try {
+				var f:File = File.desktopDirectory;
+				f =f.resolvePath(fileName);
+				
+				var fs:FileStream = new FileStream();
+				fs.open(f,FileMode.UPDATE);
+				fs.writeBytes(byteArr, 0, byteArr.length);
+				fs.close();
+
+				trace("photoSaved");
+
+			} catch (e:Error) {
+
+				trace(e.message);
+
+			}
+			
+
+//
+			if (hatenaId.text == ""){
+				header.text = "idいれてから！";
+				return;
+			}
+			if (hatenaPass.text == ""){
+				header.text = "passいれてから！";
+				return;
+			}
+
+			//ID,PASSの暗号化保存
+			var str:String = hatenaId.text;
+			var bytes:ByteArray = new ByteArray();
+			bytes.writeUTFBytes(str);
+			EncryptedLocalStore.setItem("hID", bytes);
+
+			var strP:String  = hatenaPass.text;
+			var bytesP:ByteArray = new ByteArray();
+			bytesP.writeUTFBytes(strP);
+			EncryptedLocalStore.setItem("hPASS", bytesP);
+			
+			header.text = "ボタン押したよ。";
+			
+			var wsseToken:String =WSSEUsernameToken.getUsernameToken(hatenaId.text,hatenaPass.text);
+			trace(wsseToken);
+
+			var request:URLRequest = new URLRequest("http://f.hatena.ne.jp/atom/post");
+			
+            //画像のエンコード
+            var enc:Base64Encoder = new Base64Encoder();
+            enc.encodeBytes(byteArr);
+            var encStr:String;
+            encStr = enc.flush();
+            
+            //XMLの組み立て
+    		var xmlString:String = new String();
+    		xmlString= '<entry xmlns="http://purl.org/atom/ns#"> ' + 
+    			       	'<title>Sample</title>' + 
+    			        '<content mode="base64" type="image/jpeg">' + encStr + '</content>' + 
+    			   	   '</entry>';
+    			               
+        	//リクエストの組み立て
+        	request.method = "POST";
+        	request.contentType = "application/x.atom+xml";
+           	request.requestHeaders = new Array(new URLRequestHeader("X-WSSE", wsseToken));
+			request.data= xmlString;
+
+			var loader:URLLoader = new URLLoader();
+			configureListeners(loader);
+        	try {
+            	loader.load(request);
+        	} catch (error:Error) {
+            	trace("Unable to load requested document.");
+        	}
+
+
+	
+		}
+
+        private function completeHandler(event:Event):void {
+            var loader:URLLoader = URLLoader(event.target);
+            trace("completeHandler: " + loader.data);
+            header.text = "たぶんUPできたよ。見てはいよ。";//loader.data;
+        }
+        
+        private function configureListeners(dispatcher:IEventDispatcher):void {
+            dispatcher.addEventListener(Event.COMPLETE, completeHandler);
+        }
+        
+        			
+		]]>
+	</mx:Script>
+	
+	<mx:Panel layout="absolute" id="topPanel" alpha="1.0" left="0" right="0" bottom="0" top="0">
+		<mx:VideoDisplay id="videoDisplay" right="10" left="10" top="10" bottom="67"/>
+		
+		<mx:TextInput id="hatenaId" bottom="37" right="230" width="136"/>
+		<mx:TextInput id="hatenaPass" displayAsPassword="true" bottom="37" right="98" width="120"/>
+		<mx:Text id="header" right="10" left="10" bottom="8"/>
+
+		<mx:Button label="保存" width="80" bottom="37" right="10" id="submitBtn" click="shot()"/>
+	</mx:Panel>
+	
+</mx:WindowedApplication>

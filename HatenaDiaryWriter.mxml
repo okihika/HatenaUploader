@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:WindowedApplication xmlns:mx="http://www.adobe.com/2006/mxml" 
+	applicationComplete="initApp()"
+	layout="absolute" title="HatenaDiary" showTitleBar="false" width="424" height="410">
+	
+	<mx:Script>
+		<![CDATA[
+		import com.adobe.crypto.WSSEUsernameToken;
+		//import com.adobe.crypto.WSSEUsernameToken;
+		
+
+		private function initApp():void{
+			
+			//id,passの取得
+			try{
+				var storedValue:ByteArray= EncryptedLocalStore.getItem("hID");
+				hatenaId.text =storedValue.readUTFBytes(storedValue.length);
+			}catch(error:Error){
+				hatenaId.text = "";
+			}
+
+			try{
+				var storedValuePass:ByteArray= EncryptedLocalStore.getItem("hPASS");
+				hatenaPass.text =storedValuePass.readUTFBytes(storedValuePass.length);
+			}catch(error:Error){
+				hatenaPass.text = "";
+			}
+
+		}
+		
+		private function blogEntrySubmit():void{
+			trace("blogEntrySubmit");
+			if (hatenaId.text == ""){
+				header.text = "idいれてから！";
+				return;
+			}
+			if (hatenaPass.text == ""){
+				header.text = "passいれてから！";
+				return;
+			}
+
+			//ID,PASSの暗号化保存
+			var str:String = hatenaId.text;
+			var bytes:ByteArray = new ByteArray();
+			bytes.writeUTFBytes(str);
+			EncryptedLocalStore.setItem("hID", bytes);
+
+			var strP:String  = hatenaPass.text;
+			var bytesP:ByteArray = new ByteArray();
+			bytesP.writeUTFBytes(strP);
+			EncryptedLocalStore.setItem("hPASS", bytesP);
+			
+			header.text = "ボタン押したよ。";
+
+			var wsseToken:String =WSSEUsernameToken.getUsernameToken(hatenaId.text,hatenaPass.text);
+			trace(wsseToken);
+
+			var request:URLRequest = new URLRequest("http://d.hatena.ne.jp/" + hatenaId.text + "/atom/blog");
+			
+            
+            //XMLの組み立て
+    		var xmlString:String = new String();
+    			   	   
+			xmlString= '<?xml version="1.0" encoding="utf-8"?>' + 
+						'<entry xmlns="http://purl.org/atom/ns#">' + 
+  							'<title>' + blogTitle.text + '</title>' + 
+  							'<content type="text/plain">' + 
+    						blogContent.text + 
+  							'</content>' + 
+  							'<updated>2008-01-01T00:00:00+09:00</updated>' + 
+							'</entry>';
+
+    			   	   
+    			   	   
+    			               
+        	//リクエストの組み立て
+        	request.method = "POST";
+        	request.contentType = "application/x.atom+xml";
+           	request.requestHeaders = new Array(new URLRequestHeader("X-WSSE", wsseToken));
+			request.data= xmlString;
+
+			var loader:URLLoader = new URLLoader();
+			configureListeners(loader);
+        	try {
+            	loader.load(request);
+        	} catch (error:Error) {
+            	trace("Unable to load requested document.");
+        	}
+						
+		}
+
+        private function completeHandler(event:Event):void {
+            var loader:URLLoader = URLLoader(event.target);
+            trace("completeHandler: " + loader.data);
+            header.text = "たぶんUPできたよ。見てはいよ。";//loader.data;
+        }
+        
+        private function configureListeners(dispatcher:IEventDispatcher):void {
+            dispatcher.addEventListener(Event.COMPLETE, completeHandler);
+            //dispatcher.addEventListener(Event.OPEN, openHandler);
+            //dispatcher.addEventListener(ProgressEvent.PROGRESS, progressHandler);
+            //dispatcher.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler);
+            //dispatcher.addEventListener(HTTPStatusEvent.HTTP_STATUS, httpStatusHandler);
+            //dispatcher.addEventListener(IOErrorEvent.IO_ERROR, ioErrorHandler);
+        }
+        
+        			
+		]]>
+	</mx:Script>	
+	
+	<mx:Panel layout="absolute" id="topPanel" alpha="1.0" left="0" right="0" bottom="0" top="0">
+		<mx:TextInput id="hatenaId" bottom="36" right="256" width="136"/>
+		<mx:TextInput id="hatenaPass" displayAsPassword="true" bottom="37" right="98" width="150"/>
+		<mx:Text id="header" right="10" left="10" bottom="8"/>
+		<mx:TextArea editable="true" enabled="true" left="10" right="10" top="46" bottom="67" id="blogContent"/>
+		<mx:TextInput height="28" right="10" left="10" top="10" id="blogTitle" editable="true" enabled="true"/>
+		<mx:Button label="保存" width="80" bottom="37" right="10" id="submitBtn" click="blogEntrySubmit()"/>
+	</mx:Panel>
+	
+</mx:WindowedApplication>
